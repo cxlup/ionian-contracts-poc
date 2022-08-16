@@ -1,0 +1,11 @@
+out/
+cache/
+node_modules/
+.env
+.idea/
+.vscode/
+artifacts/
+deploy/*
+
+yarn.lock
+yarn-error.log
