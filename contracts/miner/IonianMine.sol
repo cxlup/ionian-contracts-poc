@@ -13,9 +13,12 @@ import "../utils/Blake2b.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+import "hardhat/console.sol";
+
 contract IonianMine {
     uint256 constant BYTES32_PER_SECTOR = 8;
     uint256 constant BYTES_PER_SECTOR = BYTES32_PER_SECTOR * 32;
+    uint256 constant SECTORS_PER_PRICING = (8 * (1 << 30)) / 256;
     uint256 constant SECTORS_PER_CHUNK = 1024;
     uint256 constant SECTORS_PER_SEAL = 16;
     uint256 constant SCRATCHPAD_REPEAT = 4;
@@ -25,8 +28,7 @@ contract IonianMine {
     uint256 constant HASHES_PER_SEGMENT = 64; //TODO: formula
     uint256 constant BYTES32_PER_SEAL = SECTORS_PER_SEAL * BYTES32_PER_SECTOR;
 
-    uint256 constant MINING_CHUNK_MASK = MASK10;
-    uint256 constant MAX_MINING_LENGTH = (8 * (1 << 30)) / 256;
+    uint256 constant MAX_MINING_LENGTH = (8 * (1 << 40)) / 256;
 
     bytes32 constant EMPTY_HASH =
         hex"c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470";
@@ -34,16 +36,17 @@ contract IonianMine {
     uint256 constant DIFFICULTY_ADJUST_PERIOD = 100;
     uint256 constant TARGET_PERIOD = 100;
 
-    IFlow flow;
-    uint256 lastMinedEpoch = 0;
-    mapping(address => bytes32) minerIds;
+    IFlow public flow;
+    uint256 public lastMinedEpoch = 0;
+    uint256 public targetQuality;
+    mapping(address => bytes32) public minerIds;
 
-    uint256 targetQuality;
     uint256 totalMiningTime;
     uint256 totalSubmission;
 
     constructor(address _flow) {
         flow = IFlow(_flow);
+        targetQuality = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
     }
 
     struct PoraAnswer {
@@ -53,7 +56,7 @@ contract IonianMine {
         uint256 startPosition;
         uint256 mineLength;
         uint256 recallPosition;
-        uint256 chunkOffset;
+        uint256 sealOffset;
         bytes32 sealedContextDigest;
         bytes32[BYTES32_PER_SEAL] sealedData;
         bytes32[] merkleProof;
@@ -70,23 +73,34 @@ contract IonianMine {
         require(context.epoch > lastMinedEpoch, "Epoch has been mined");
         lastMinedEpoch = context.epoch;
 
+        // Step 1: basic check for submission
         basicCheck(answer, context);
-        checkMerkleRoot(answer, context);
+
+        // Step 2: check merkle root
+        bytes32[BYTES32_PER_SEAL] memory unsealedData = unseal(answer);
+        bytes32 flowRoot = recoverMerkleRoot(answer, unsealedData);
+        require(flowRoot == context.flowRoot, "Inconsistent merkle root");
+        delete unsealedData;
+
+        // Step 3: compute PoRA quality
         bytes32 quality = PoRA(answer);
         require(
-            uint256(quality) >= targetQuality,
+            uint256(quality) <= targetQuality,
             "Do not reach target quality"
         );
 
-        adjustQuality(context);
-        // TODO: send reward
+        // TODO: Step 4: adjust quality
+        // _adjustQuality(context);
+
+        // TODO: Step 5: reward fee
     }
 
     function basicCheck(PoraAnswer calldata answer, MineContext memory context)
         public
         view
     {
-        uint256 maxLength = context.flowLength & MINING_CHUNK_MASK;
+        uint256 maxLength = (context.flowLength / SECTORS_PER_CHUNK) *
+            SECTORS_PER_CHUNK;
 
         require(
             answer.startPosition + answer.mineLength <= maxLength,
@@ -98,18 +112,11 @@ contract IonianMine {
         );
 
         require(
-            answer.startPosition % SECTORS_PER_CHUNK == 0,
-            "start position is not aligned"
-        );
-        require(
-            answer.mineLength % SECTORS_PER_CHUNK == 0,
-            "end position is not aligned"
+            answer.startPosition % SECTORS_PER_PRICING == 0,
+            "Start position is not aligned"
         );
 
-        uint256 requiredLength = Math.min(
-            maxLength & MINING_CHUNK_MASK,
-            MAX_MINING_LENGTH
-        );
+        uint256 requiredLength = Math.min(maxLength, MAX_MINING_LENGTH);
 
         require(answer.mineLength >= requiredLength, "Mining range too short");
 
@@ -128,14 +135,17 @@ contract IonianMine {
         require(answer.minerId != bytes32(0x0), "Miner ID does not exist");
         require(answer.minerId == minerId, "Miner ID is inconsistent");
 
-        bytes32[3] memory seedInput = [
+        bytes32[5] memory seedInput = [
             minerId,
+            answer.nonce,
             answer.contextDigest,
-            answer.nonce
+            bytes32(answer.startPosition),
+            bytes32(answer.mineLength)
         ];
+
         bytes32[2] memory blake2bHash = Blake2b.blake2b(seedInput);
 
-        uint256 scratchPadOffset = answer.chunkOffset % SCRATCHPAD_SEGMENTS;
+        uint256 scratchPadOffset = answer.sealOffset % SCRATCHPAD_SEGMENTS;
         bytes32[BYTES32_PER_SEAL] memory scratchPad;
 
         for (uint256 i = 0; i < scratchPadOffset; i += 1) {
@@ -144,10 +154,7 @@ contract IonianMine {
             }
         }
 
-        scratchPad[0] = blake2bHash[0] ^ answer.sealedData[0];
-        scratchPad[1] = blake2bHash[1] ^ answer.sealedData[1];
-
-        for (uint256 i = 2; i < BYTES32_PER_SEAL; i += 2) {
+        for (uint256 i = 0; i < BYTES32_PER_SEAL; i += 2) {
             blake2bHash = Blake2b.blake2b(blake2bHash);
             scratchPad[i] = blake2bHash[0] ^ answer.sealedData[i];
             scratchPad[i + 1] = blake2bHash[1] ^ answer.sealedData[i + 1];
@@ -163,15 +170,15 @@ contract IonianMine {
             }
         }
 
-        uint256 recallOffset = uint256(blake2bHash[0]) %
+        uint256 chunkOffset = uint256(keccak256(abi.encode(blake2bHash))) %
             (answer.mineLength / SECTORS_PER_CHUNK);
 
         require(
             answer.recallPosition ==
                 answer.startPosition +
-                    recallOffset *
+                    chunkOffset *
                     SECTORS_PER_CHUNK +
-                    scratchPadOffset *
+                    answer.sealOffset *
                     SECTORS_PER_SEAL,
             "Incorrect recall position"
         );
@@ -182,17 +189,17 @@ contract IonianMine {
 
         h = Blake2b.blake2bF(
             h,
+            bytes32(answer.sealOffset),
             minerId,
             answer.nonce,
-            bytes32(answer.startPosition),
-            bytes32(answer.mineLength),
+            answer.contextDigest,
             128,
             false
         );
         h = Blake2b.blake2bF(
             h,
-            answer.contextDigest,
-            bytes32(0),
+            bytes32(answer.startPosition),
+            bytes32(answer.mineLength),
             bytes32(0),
             bytes32(0),
             256,
@@ -220,24 +227,24 @@ contract IonianMine {
             scratchPad[BYTES32_PER_SEAL - 2],
             scratchPad[BYTES32_PER_SEAL - 1],
             256 + BYTES32_PER_SEAL * 32,
-            false
+            true
         );
         delete scratchPad;
         return h[0];
     }
 
-    function checkMerkleRoot(
-        PoraAnswer calldata answer,
-        MineContext memory context
-    ) public pure {
-        bytes32[BYTES32_PER_SEAL] memory unsealedData;
+    function unseal(PoraAnswer calldata answer)
+        public
+        pure
+        returns (bytes32[BYTES32_PER_SEAL] memory unsealedData)
+    {
         unsealedData[0] =
             answer.sealedData[0] ^
             keccak256(
                 abi.encode(
                     answer.minerId,
                     answer.sealedContextDigest,
-                    answer.startPosition
+                    answer.recallPosition
                 )
             );
         for (uint256 i = 1; i < BYTES32_PER_SEAL; i += 1) {
@@ -245,7 +252,13 @@ contract IonianMine {
                 answer.sealedData[i] ^
                 keccak256(abi.encode(answer.sealedData[i - 1]));
         }
+    }
 
+    function recoverMerkleRoot(
+        PoraAnswer calldata answer,
+        bytes32[BYTES32_PER_SEAL] memory unsealedData
+    ) public pure returns (bytes32) {
+        // console.log("Compute leaf");
         // Compute leaf of hash
         for (uint256 i = 0; i < BYTES32_PER_SEAL; i += BYTES32_PER_SECTOR) {
             bytes32 x;
@@ -256,22 +269,23 @@ contract IonianMine {
                 )
             }
             unsealedData[i] = x;
+            // console.logBytes32(x);
         }
 
-        // Compute sealed root
-        for (
-            uint256 i = (BYTES32_PER_SECTOR << 1);
-            i < BYTES32_PER_SEAL;
-            i <<= 1
-        ) {
-            for (uint256 j = 0; j < BYTES32_PER_SEAL; j += i) {
+        for (uint256 i = BYTES32_PER_SECTOR; i < BYTES32_PER_SEAL; i <<= 1) {
+            // console.log("i=%d", i);
+            for (uint256 j = 0; j < BYTES32_PER_SEAL; j += i << 1) {
                 bytes32 left = unsealedData[j];
-                bytes32 right = unsealedData[j + (i >> 1)];
+                bytes32 right = unsealedData[j + i];
                 unsealedData[j] = keccak256(abi.encode(left, right));
+                // console.logBytes32(unsealedData[j]);
             }
         }
         bytes32 currentHash = unsealedData[0];
         delete unsealedData;
+
+        // console.log("Seal root");
+        // console.logBytes32(currentHash);
 
         uint256 unsealedIndex = answer.recallPosition / SECTORS_PER_SEAL;
 
@@ -286,14 +300,17 @@ contract IonianMine {
                 right = currentHash;
             }
             currentHash = keccak256(abi.encode(left, right));
+            // console.log("sibling");
+            // console.logBytes32(answer.merkleProof[i]);
+            // console.log("current");
+            // console.logBytes32(currentHash);
             unsealedIndex /= 2;
         }
-
-        require(currentHash == context.flowRoot, "Inconsistent merkle root");
+        return currentHash;
     }
 
-    function adjustQuality(MineContext memory context) internal {
-        uint256 miningTime = block.number - context.epochStart;
+    function _adjustQuality(MineContext memory context) internal {
+        uint256 miningTime = block.number - context.mineStart;
         totalMiningTime += miningTime;
         totalSubmission += 1;
         if (totalSubmission == DIFFICULTY_ADJUST_PERIOD) {

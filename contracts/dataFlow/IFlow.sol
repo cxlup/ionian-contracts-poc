@@ -9,9 +9,10 @@ struct EpochRange {
 
 struct MineContext {
     uint256 epoch;
-    uint256 epochStart;
+    uint256 mineStart;
     bytes32 flowRoot;
     uint256 flowLength;
+    bytes32 blockDigest;
     bytes32 digest;
 }
 
@@ -51,4 +52,6 @@ interface IFlow {
         external
         view
         returns (EpochRange memory);
+
+    function numSubmissions() external view returns (uint256);
 }

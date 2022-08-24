@@ -19,7 +19,7 @@ contract Flow is Pausable, IFlow, IncrementalMerkleTree {
     uint256 constant MAX_DEPTH = 64;
     uint256 constant BASE_FEE = 1000;
     uint256 constant ENTRY_FEE = 100;
-    uint256 constant ROOT_AVALIABLE_WINDOW = 20;
+    uint256 constant ROOT_AVAILABLE_WINDOW = 20;
     uint256 constant CONTEXT_PERIOD = 100;
     uint256 constant DEPLOY_DELAY = 0;
 
@@ -41,13 +41,14 @@ contract Flow is Pausable, IFlow, IncrementalMerkleTree {
     constructor(address _token) IncrementalMerkleTree(bytes32(0x0)) {
         token = IERC20(_token);
         epoch = 0;
-        rootHistory = new DigestHistory(ROOT_AVALIABLE_WINDOW);
+        rootHistory = new DigestHistory(ROOT_AVAILABLE_WINDOW);
         firstBlock = block.number + DEPLOY_DELAY;
         context = MineContext({
             epoch: 0,
-            epochStart: firstBlock,
-            flowRoot: EMPTY_HASH,
+            mineStart: firstBlock,
+            flowRoot: root(),
             flowLength: 1,
+            blockDigest: EMPTY_HASH,
             digest: EMPTY_HASH
         });
     }
@@ -71,23 +72,7 @@ contract Flow is Pausable, IFlow, IncrementalMerkleTree {
         require(submission.valid(), "Invalid submission");
         makeContext();
 
-        uint256 startIndex;
-
-        uint256 beforeAppendLength = currentLength;
-
-        for (uint256 i = 0; i < submission.nodes.length; i++) {
-            bytes32 nodeRoot = submission.nodes[i].root;
-            uint256 height = submission.nodes[i].height;
-            uint256 nodeStartIndex = insertNode(nodeRoot, height);
-            if (i == 0) {
-                startIndex = nodeStartIndex;
-            }
-        }
-
-        uint256 afterAppendLength = currentLength;
-
-        uint256 chargedLength = afterAppendLength - beforeAppendLength;
-        chargeFee(chargedLength);
+        uint256 startIndex = _insertNodeList(submission);
 
         uint256 length = submission.size();
         bytes32 digest = submission.digest();
@@ -106,6 +91,25 @@ contract Flow is Pausable, IFlow, IncrementalMerkleTree {
         return (index, digest, startIndex, length);
     }
 
+    function _insertNodeList(IonianSubmission calldata submission)
+        internal
+        returns (uint256 startIndex)
+    {
+        uint256 beforeAppendLength = currentLength;
+        for (uint256 i = 0; i < submission.nodes.length; i++) {
+            bytes32 nodeRoot = submission.nodes[i].root;
+            uint256 height = submission.nodes[i].height;
+            uint256 nodeStartIndex = _insertNode(nodeRoot, height);
+            if (i == 0) {
+                startIndex = nodeStartIndex;
+            }
+        }
+        uint256 afterAppendLength = currentLength;
+        uint256 chargedLength = afterAppendLength - beforeAppendLength;
+
+        chargeFee(chargedLength);
+    }
+
     function makeContext() public launched {
         uint256 nextEpochStart;
         unchecked {
@@ -121,11 +125,13 @@ contract Flow is Pausable, IFlow, IncrementalMerkleTree {
         assert(index == epoch);
 
         bytes32 contextDigest;
+        bytes32 blockDigest;
 
         if (nextEpochStart + 256 < block.number) {
             contextDigest = EMPTY_HASH;
+            blockDigest = EMPTY_HASH;
         } else {
-            bytes32 blockDigest = blockhash(nextEpochStart);
+            blockDigest = blockhash(nextEpochStart);
             contextDigest = keccak256(
                 abi.encode(blockDigest, currentRoot, currentLength)
             );
@@ -144,9 +150,10 @@ contract Flow is Pausable, IFlow, IncrementalMerkleTree {
 
         context = MineContext({
             epoch: epoch,
-            epochStart: nextEpochStart,
+            mineStart: nextEpochStart,
             flowRoot: currentRoot,
             flowLength: currentLength,
+            blockDigest: blockDigest,
             digest: contextDigest
         });
 
@@ -190,5 +197,9 @@ contract Flow is Pausable, IFlow, IncrementalMerkleTree {
     function chargeFee(uint256 size) internal {
         uint256 fee = BASE_FEE + ENTRY_FEE * size;
         token.safeTransferFrom(msg.sender, address(this), fee);
+    }
+
+    function numSubmissions() external view returns (uint256) {
+        return submissionIndex;
     }
 }

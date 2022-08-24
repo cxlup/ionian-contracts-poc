@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Unlicense
 pragma solidity >=0.8.0;
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "./IDigestHistory.sol";
 
-contract DigestHistory is IDigestHistory {
+contract DigestHistory is IDigestHistory, Ownable {
     bytes32[] digests;
     uint256 nextIndex;
 
-    error UnavaliableIndex(uint256);
+    error UnavailableIndex(uint256);
 
     constructor(uint256 capacity) {
         digests = new bytes32[](capacity);
@@ -22,7 +23,7 @@ contract DigestHistory is IDigestHistory {
         return index;
     }
 
-    function avaliable(uint256 index) public view returns (bool) {
+    function available(uint256 index) public view returns (bool) {
         uint256 capacity = digests.length;
         return
             index < nextIndex &&
@@ -40,8 +41,8 @@ contract DigestHistory is IDigestHistory {
     }
 
     function at(uint256 index) external view returns (bytes32) {
-        if (!avaliable(index)) {
-            revert UnavaliableIndex(index);
+        if (!available(index)) {
+            revert UnavailableIndex(index);
         }
         return digests[index % digests.length];
     }

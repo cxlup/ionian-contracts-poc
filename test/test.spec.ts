@@ -1,8 +1,9 @@
 import chai, { expect } from "chai";
 import { Contract } from "ethers";
 import { ethers, waffle } from "hardhat";
-import { hexlify, arrayify } from "ethers/utils";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
+
+import type { Flow, IERC20 } from "../typechain-types";
 
 describe("Ionian Flow", function () {
   let owner: SignerWithAddress;
@@ -10,8 +11,8 @@ describe("Ionian Flow", function () {
     [owner] = await ethers.getSigners();
   });
 
-  let flow: Contract;
-  let token: Contract;
+  let flow: Flow;
+  let token: IERC20;
   beforeEach(async () => {
     let erc20ABI = await ethers.getContractFactory("MockToken");
     token = await erc20ABI.deploy();
@@ -27,7 +28,9 @@ describe("Ionian Flow", function () {
       "ccc2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
       "hex"
     );
-    await flow.submit({ nodes: [{ root, height: 8 }] });
+    console.log("before submit");
+    await flow.submit({ length: 256, nodes: [{ root, height: 8 }] });
+    console.log("after submit");
     expect(await token.balanceOf(owner.address)).to.equal(999947900);
   });
 });

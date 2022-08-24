@@ -36,7 +36,15 @@ library Blake2b {
         h[0] = BLAKE2B_INIT_STATE0;
         h[1] = BLAKE2B_INIT_STATE1;
 
-        blake2bF(h, input[0], input[1], bytes32(0x0), bytes32(0x0), 64, true);
+        h = blake2bF(
+            h,
+            input[0],
+            input[1],
+            bytes32(0x0),
+            bytes32(0x0),
+            64,
+            true
+        );
     }
 
     function blake2b(bytes32[3] memory input)
@@ -47,7 +55,27 @@ library Blake2b {
         h[0] = BLAKE2B_INIT_STATE0;
         h[1] = BLAKE2B_INIT_STATE1;
 
-        blake2bF(h, input[0], input[1], input[2], bytes32(0x0), 96, true);
+        h = blake2bF(h, input[0], input[1], input[2], bytes32(0x0), 96, true);
+    }
+
+    function blake2b(bytes32[5] memory input)
+        internal
+        view
+        returns (bytes32[2] memory h)
+    {
+        h[0] = BLAKE2B_INIT_STATE0;
+        h[1] = BLAKE2B_INIT_STATE1;
+
+        h = blake2bF(h, input[0], input[1], input[2], input[3], 128, false);
+        h = blake2bF(
+            h,
+            input[4],
+            bytes32(0x0),
+            bytes32(0x0),
+            bytes32(0x0),
+            160,
+            true
+        );
     }
 
     function blake2b(bytes32[] memory input)
@@ -57,6 +85,17 @@ library Blake2b {
     {
         h[0] = BLAKE2B_INIT_STATE0;
         h[1] = BLAKE2B_INIT_STATE1;
+        if (input.length == 0) {
+            h = blake2bF(
+                h,
+                bytes32(0x0),
+                bytes32(0x0),
+                bytes32(0x0),
+                bytes32(0x0),
+                0,
+                true
+            );
+        }
         for (uint256 i = 0; i < input.length; i += 4) {
             bytes32 m0 = input[i];
             bytes32 m1 = bytes32(0x0);
@@ -70,16 +109,13 @@ library Blake2b {
                 m2 = input[i + 2];
                 m3 = input[i + 3];
             } else {
-                m0 = input[i];
+                length = input.length * 32;
                 if (i + 1 < input.length) {
                     m1 = input[i + 1];
-                    length = (i + 1) * 32;
                     if (i + 2 < input.length) {
                         m2 = input[i + 2];
-                        length = (i + 2) * 32;
                         if (i + 3 < input.length) {
                             m3 = input[i + 3];
-                            length = (i + 3) * 32;
                         }
                     }
                 }
@@ -150,6 +186,7 @@ library Blake2b {
     function reverse16(uint64 v) internal pure returns (bytes8) {
         // swap bytes
         v = (v >> 8) | (v << 8);
+        v <<= 48;
 
         return bytes8(v);
     }
@@ -160,6 +197,8 @@ library Blake2b {
 
         // swap 2-byte long pairs
         v = (v >> 16) | (v << 16);
+
+        v <<= 32;
 
         return bytes8(v);
     }

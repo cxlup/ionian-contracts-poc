@@ -1,7 +1,10 @@
-require("@nomicfoundation/hardhat-toolbox");
+// require("@nomicfoundation/hardhat-toolbox");
+import { HardhatUserConfig } from "hardhat/config";
+import "@nomiclabs/hardhat-waffle";
+import "@nomicfoundation/hardhat-toolbox";
 
 /** @type import('hardhat/config').HardhatUserConfig */
-module.exports = {
+const config: HardhatUserConfig = {
   solidity: {
     version: "0.8.16",
     settings: {
@@ -13,25 +16,27 @@ module.exports = {
             "abi",
             "evm.bytecode.sourceMap",
             "evm.deployedBytecode.sourceMap",
-            "metadata"
+            "metadata",
           ],
-          "": [
-            "ast"
-          ]
-        }
+          "": ["ast"],
+        },
       },
       evmVersion: "istanbul",
-      viaIR: true,
+      // viaIR: true,
       optimizer: {
         enabled: true,
-        runs: 200
-      }
-    }
+        runs: 200,
+      },
+    },
   },
   networks: {
     localtest: {
       url: "http://127.0.0.1:8545",
-      accounts: ["46b9e861b63d3509c88b7817275a30d22d62c8cd8fa6486ddee35ef0d8e0495f"]
-    }
-  }
+      accounts: [
+        "46b9e861b63d3509c88b7817275a30d22d62c8cd8fa6486ddee35ef0d8e0495f",
+      ],
+    },
+  },
 };
+
+export default config;

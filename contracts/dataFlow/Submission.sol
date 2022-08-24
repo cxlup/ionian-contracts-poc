@@ -8,11 +8,14 @@ struct IonianSubmissionNode {
 }
 
 struct IonianSubmission {
+    uint256 length;
     IonianSubmissionNode[] nodes;
 }
 
 library IonianSubmissionLibrary {
     uint256 constant MAX_DEPTH = 64;
+    uint256 constant ENTRY_SIZE = 256;
+    uint256 constant MAX_LENGTH = 4;
 
     function size(IonianSubmission memory submission)
         internal
@@ -35,6 +38,15 @@ library IonianSubmissionLibrary {
             return false;
         }
 
+        // Solidity 0.8 has overflow checking by default.
+        if (
+            submission.nodes[0].height -
+                submission.nodes[submission.nodes.length - 1].height >=
+            MAX_LENGTH
+        ) {
+            return false;
+        }
+
         if (submission.nodes[0].height >= MAX_DEPTH) {
             return false;
         }
@@ -43,6 +55,29 @@ library IonianSubmissionLibrary {
             if (submission.nodes[i + 1].height >= submission.nodes[i].height) {
                 return false;
             }
+        }
+
+        uint256 submissionCapacity = size(submission);
+
+        if (submission.length > submissionCapacity * ENTRY_SIZE) {
+            return false;
+        }
+
+        uint256 lastCapacity;
+        if (submissionCapacity < (1 << MAX_LENGTH)) {
+            lastCapacity = submissionCapacity;
+        } else if (submission.nodes.length == 1) {
+            lastCapacity =
+                submissionCapacity -
+                (submissionCapacity >> MAX_LENGTH);
+        } else {
+            lastCapacity =
+                submissionCapacity -
+                (1 << (submission.nodes[0].height - MAX_LENGTH + 1));
+        }
+
+        if (submission.length <= lastCapacity) {
+            return false;
         }
 
         return true;
