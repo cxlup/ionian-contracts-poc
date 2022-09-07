@@ -36,6 +36,14 @@ contract IonianMine {
     uint256 constant DIFFICULTY_ADJUST_PERIOD = 100;
     uint256 constant TARGET_PERIOD = 100;
 
+    // Settings bit
+    uint256 constant NO_DATA_SEAL = 0x1;
+    uint256 constant NO_DATA_PROOF = 0x2;
+
+    // Options for ionian-mine development
+    bool immutable sealDataEnabled;
+    bool immutable dataProofEnabled;
+
     IFlow public flow;
     uint256 public lastMinedEpoch = 0;
     uint256 public targetQuality;
@@ -44,9 +52,11 @@ contract IonianMine {
     uint256 totalMiningTime;
     uint256 totalSubmission;
 
-    constructor(address _flow) {
+    constructor(address _flow, uint256 settings) {
         flow = IFlow(_flow);
         targetQuality = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
+        sealDataEnabled = (settings & NO_DATA_SEAL == 0);
+        dataProofEnabled = (settings & NO_DATA_PROOF == 0);
     }
 
     struct PoraAnswer {
@@ -77,9 +87,16 @@ contract IonianMine {
         basicCheck(answer, context);
 
         // Step 2: check merkle root
-        bytes32[BYTES32_PER_SEAL] memory unsealedData = unseal(answer);
-        bytes32 flowRoot = recoverMerkleRoot(answer, unsealedData);
-        require(flowRoot == context.flowRoot, "Inconsistent merkle root");
+        bytes32[BYTES32_PER_SEAL] memory unsealedData;
+        if (sealDataEnabled) {
+            unsealedData = unseal(answer);
+        } else {
+            unsealedData = answer.sealedData;
+        }
+        if (dataProofEnabled) {
+            bytes32 flowRoot = recoverMerkleRoot(answer, unsealedData);
+            require(flowRoot == context.flowRoot, "Inconsistent merkle root");
+        }
         delete unsealedData;
 
         // Step 3: compute PoRA quality

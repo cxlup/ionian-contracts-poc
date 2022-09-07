@@ -10,8 +10,8 @@ async function main() {
 
   await token.approve(flow.address, 1e9);
 
-  let mineABI = await ethers.getContractFactory("IonianMine");
-  let mine = await mineABI.deploy(flow.address);
+  let mineABI = await ethers.getContractFactory("IonianMineTest");
+  let mine = await mineABI.deploy(flow.address, 3);
 
   const output = `token = '${token.address}'\nflow = '${flow.address}'\nionianMine = '${mine.address}'`;
 

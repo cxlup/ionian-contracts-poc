@@ -57,7 +57,7 @@ describe("Miner", function () {
     mockFlow = await waffle.deployMockContract(owner, abi);
 
     let mineABI = await ethers.getContractFactory("IonianMineTest");
-    mineContract = await mineABI.deploy(mockFlow.address);
+    mineContract = await mineABI.deploy(mockFlow.address, 0);
 
     minerId = hexToBuffer(await keccak("minerId", 256));
     await mineContract.setMiner(minerId);
