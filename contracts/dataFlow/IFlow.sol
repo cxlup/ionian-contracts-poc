@@ -7,6 +7,12 @@ struct EpochRange {
     uint128 end;
 }
 
+struct EpochRangeWithContextDigest {
+    uint128 start;
+    uint128 end;
+    bytes32 digest;
+}
+
 struct MineContext {
     uint256 epoch;
     uint256 mineStart;

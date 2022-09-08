@@ -16,41 +16,42 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "hardhat/console.sol";
 
 contract IonianMine {
-    uint256 constant BYTES32_PER_SECTOR = 8;
-    uint256 constant BYTES_PER_SECTOR = BYTES32_PER_SECTOR * 32;
-    uint256 constant SECTORS_PER_PRICING = (8 * (1 << 30)) / 256;
-    uint256 constant SECTORS_PER_CHUNK = 1024;
-    uint256 constant SECTORS_PER_SEAL = 16;
-    uint256 constant SCRATCHPAD_REPEAT = 4;
+    uint256 private constant BYTES32_PER_SECTOR = 8;
+    uint256 private constant BYTES_PER_SECTOR = BYTES32_PER_SECTOR * 32;
+    uint256 private constant SECTORS_PER_PRICING = (8 * (1 << 30)) / 256;
+    uint256 private constant SECTORS_PER_CHUNK = 1024;
+    uint256 private constant SECTORS_PER_SEAL = 16;
+    uint256 private constant SCRATCHPAD_REPEAT = 4;
 
-    uint256 constant SCRATCHPAD_SEGMENTS =
+    uint256 private constant SCRATCHPAD_SEGMENTS =
         SECTORS_PER_CHUNK / SECTORS_PER_SEAL / SCRATCHPAD_REPEAT;
-    uint256 constant HASHES_PER_SEGMENT = 64; //TODO: formula
-    uint256 constant BYTES32_PER_SEAL = SECTORS_PER_SEAL * BYTES32_PER_SECTOR;
+    uint256 private constant HASHES_PER_SEGMENT = 64; //TODO: formula
+    uint256 private constant BYTES32_PER_SEAL =
+        SECTORS_PER_SEAL * BYTES32_PER_SECTOR;
 
-    uint256 constant MAX_MINING_LENGTH = (8 * (1 << 40)) / 256;
+    uint256 private constant MAX_MINING_LENGTH = (8 * (1 << 40)) / 256;
 
-    bytes32 constant EMPTY_HASH =
+    bytes32 private constant EMPTY_HASH =
         hex"c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470";
 
-    uint256 constant DIFFICULTY_ADJUST_PERIOD = 100;
-    uint256 constant TARGET_PERIOD = 100;
+    uint256 private constant DIFFICULTY_ADJUST_PERIOD = 100;
+    uint256 private constant TARGET_PERIOD = 100;
 
     // Settings bit
-    uint256 constant NO_DATA_SEAL = 0x1;
-    uint256 constant NO_DATA_PROOF = 0x2;
+    uint256 private constant NO_DATA_SEAL = 0x1;
+    uint256 private constant NO_DATA_PROOF = 0x2;
 
     // Options for ionian-mine development
-    bool immutable sealDataEnabled;
-    bool immutable dataProofEnabled;
+    bool public immutable sealDataEnabled;
+    bool public immutable dataProofEnabled;
 
     IFlow public flow;
     uint256 public lastMinedEpoch = 0;
     uint256 public targetQuality;
     mapping(address => bytes32) public minerIds;
 
-    uint256 totalMiningTime;
-    uint256 totalSubmission;
+    uint256 public totalMiningTime;
+    uint256 public totalSubmission;
 
     constructor(address _flow, uint256 settings) {
         flow = IFlow(_flow);

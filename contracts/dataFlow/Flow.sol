@@ -16,25 +16,27 @@ contract Flow is Pausable, IFlow, IncrementalMerkleTree {
     using IonianSubmissionLibrary for IonianSubmission;
     using SafeERC20 for IERC20;
 
-    uint256 constant MAX_DEPTH = 64;
-    uint256 constant BASE_FEE = 1000;
-    uint256 constant ENTRY_FEE = 100;
-    uint256 constant ROOT_AVAILABLE_WINDOW = 20;
-    uint256 constant CONTEXT_PERIOD = 100;
-    uint256 constant DEPLOY_DELAY = 0;
+    uint256 private constant MAX_DEPTH = 64;
+    uint256 private constant BASE_FEE = 1000;
+    uint256 private constant ENTRY_FEE = 100;
+    uint256 private constant ROOT_AVAILABLE_WINDOW = 20;
+    uint256 private constant CONTEXT_PERIOD = 100;
+    uint256 private constant DEPLOY_DELAY = 0;
 
-    bytes32 constant EMPTY_HASH =
+    bytes32 private constant EMPTY_HASH =
         hex"c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470";
 
-    IERC20 token;
-    IDigestHistory rootHistory;
+    IERC20 public token;
+    IDigestHistory public rootHistory;
 
-    uint256 submissionIndex;
-    uint256 firstBlock;
-    uint256 epoch;
-    uint256 epochStartPosition;
-    MineContext context;
-    mapping(bytes32 => EpochRange) epochRanges;
+    uint256 public submissionIndex;
+    uint256 public firstBlock;
+    uint256 public epoch;
+    uint256 public epochStartPosition;
+
+    MineContext private context;
+    mapping(bytes32 => EpochRange) private epochRanges;
+    EpochRangeWithContextDigest[] private epochRangeHistory;
 
     error InvalidSubmission();
 
@@ -142,6 +144,13 @@ contract Flow is Pausable, IFlow, IncrementalMerkleTree {
                 start: startPosition,
                 end: endPosition
             });
+            epochRangeHistory.push(
+                EpochRangeWithContextDigest({
+                    start: startPosition,
+                    end: endPosition,
+                    digest: contextDigest
+                })
+            );
 
             epochStartPosition = currentLength;
         }
@@ -170,6 +179,32 @@ contract Flow is Pausable, IFlow, IncrementalMerkleTree {
 
         // Recursive call to handle a rare case: the contract is more than one epoch behind.
         makeContext();
+    }
+
+    function queryContextAtPosition(uint128 targetPosition)
+        external
+        returns (EpochRangeWithContextDigest memory range)
+    {
+        makeContext();
+        require(
+            targetPosition <= currentLength,
+            "Queried position exceeds upper bound"
+        );
+        uint256 minIndex = 0;
+        uint256 maxIndex = epochRangeHistory.length;
+        while (maxIndex > minIndex) {
+            uint256 curIndex = (maxIndex + minIndex) / 2;
+            range = epochRangeHistory[curIndex];
+            if (targetPosition > range.end) {
+                minIndex = curIndex + 1;
+            } else if (targetPosition > range.start) {
+                return range;
+            } else {
+                // If curIndex == 0, the function will be reverted as expected.
+                maxIndex = curIndex - 1;
+            }
+        }
+        require(false, "Can not find proper context");
     }
 
     function makeContextWithResult()
