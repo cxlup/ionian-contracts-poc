@@ -9,4 +9,8 @@ contract IonianMineTest is IonianMine {
     function setMiner(bytes32 minerId) external {
         minerIds[msg.sender] = minerId;
     }
+
+    function setQuality(uint256 _targetQuality) external {
+        targetQuality = _targetQuality;
+    }
 }
