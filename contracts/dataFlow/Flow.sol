@@ -201,7 +201,7 @@ contract Flow is Pausable, IFlow, IncrementalMerkleTree {
                 return range;
             } else {
                 // If curIndex == 0, the function will be reverted as expected.
-                maxIndex = curIndex - 1;
+                maxIndex = curIndex;
             }
         }
         require(false, "Can not find proper context");
