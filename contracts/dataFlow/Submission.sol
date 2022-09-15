@@ -9,6 +9,7 @@ struct IonianSubmissionNode {
 
 struct IonianSubmission {
     uint256 length;
+    bytes tags;
     IonianSubmissionNode[] nodes;
 }
 
