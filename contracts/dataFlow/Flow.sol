@@ -187,7 +187,7 @@ contract Flow is Pausable, IFlow, IncrementalMerkleTree {
     {
         makeContext();
         require(
-            targetPosition <= currentLength,
+            targetPosition < currentLength,
             "Queried position exceeds upper bound"
         );
         uint256 minIndex = 0;
@@ -195,9 +195,9 @@ contract Flow is Pausable, IFlow, IncrementalMerkleTree {
         while (maxIndex > minIndex) {
             uint256 curIndex = (maxIndex + minIndex) / 2;
             range = epochRangeHistory[curIndex];
-            if (targetPosition > range.end) {
+            if (targetPosition >= range.end) {
                 minIndex = curIndex + 1;
-            } else if (targetPosition > range.start) {
+            } else if (targetPosition >= range.start) {
                 return range;
             } else {
                 // If curIndex == 0, the function will be reverted as expected.
