@@ -66,7 +66,7 @@ library IonianSubmissionLibrary {
 
         uint256 lastCapacity;
         if (submissionCapacity < (1 << MAX_LENGTH)) {
-            lastCapacity = submissionCapacity;
+            lastCapacity = submissionCapacity - 1;
         } else if (submission.nodes.length == 1) {
             lastCapacity =
                 submissionCapacity -
@@ -77,7 +77,7 @@ library IonianSubmissionLibrary {
                 (1 << (submission.nodes[0].height - MAX_LENGTH + 1));
         }
 
-        if (submission.length <= lastCapacity) {
+        if (submission.length <= lastCapacity * ENTRY_SIZE) {
             return false;
         }
 

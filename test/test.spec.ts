@@ -29,7 +29,7 @@ describe("Ionian Flow", function () {
       "hex"
     );
     console.log("before submit");
-    await flow.submit({ length: 256, tags: Buffer.from(''), nodes: [{ root, height: 8 }] });
+    await flow.submit({ length: 256 * 256, tags: Buffer.from(''), nodes: [{ root, height: 8 }] });
     console.log("after submit");
     expect(await token.balanceOf(owner.address)).to.equal(999947900);
   });
